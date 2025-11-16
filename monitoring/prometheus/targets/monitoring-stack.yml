@@ -1,0 +1,26 @@
+# Targets pour la stack de monitoring elle-même
+# Prometheus, Alertmanager, Grafana
+
+- targets:
+    - 'localhost:9090'
+  labels:
+    job: 'prometheus'
+    instance: 'prometheus-server'
+    env: 'production'
+    team: 'monitoring'
+
+- targets:
+    - 'alertmanager:9093'
+  labels:
+    job: 'alertmanager'
+    instance: 'alertmanager-server'
+    env: 'production'
+    team: 'monitoring'
+
+- targets:
+    - 'grafana:3000'
+  labels:
+    job: 'grafana'
+    instance: 'grafana-server'
+    env: 'production'
+    team: 'monitoring'

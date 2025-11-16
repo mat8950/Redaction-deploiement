@@ -1,0 +1,38 @@
+# Bases de données à surveiller
+# PostgreSQL, MySQL, MongoDB, Redis, etc.
+
+# PostgreSQL Exporter
+# - targets:
+#     - 'postgres-exporter:9187'
+#   labels:
+#     job: 'postgresql'
+#     instance: 'postgres-prod-01'
+#     env: 'production'
+#     type: 'database'
+
+# MySQL Exporter
+# - targets:
+#     - 'mysql-exporter:9104'
+#   labels:
+#     job: 'mysql'
+#     instance: 'mysql-prod-01'
+#     env: 'production'
+#     type: 'database'
+
+# MongoDB Exporter
+# - targets:
+#     - 'mongodb-exporter:9216'
+#   labels:
+#     job: 'mongodb'
+#     instance: 'mongodb-prod-01'
+#     env: 'production'
+#     type: 'database'
+
+# Redis Exporter
+# - targets:
+#     - 'redis-exporter:9121'
+#   labels:
+#     job: 'redis'
+#     instance: 'redis-prod-01'
+#     env: 'production'
+#     type: 'cache'

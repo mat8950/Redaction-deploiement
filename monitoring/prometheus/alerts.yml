@@ -1,0 +1,78 @@
+groups:
+  # Groupe d'alertes pour la disponibilité des services
+  - name: service_availability
+    interval: 30s
+    rules:
+      # Alerte si une instance est down
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Instance {{ $labels.instance }} est down"
+          description: "L'instance {{ $labels.instance }} du job {{ $labels.job }} est inaccessible depuis plus de 2 minutes."
+
+  # Groupe d'alertes pour les ressources système
+  - name: system_resources
+    interval: 30s
+    rules:
+      # Alerte si CPU > 80%
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "CPU élevé sur {{ $labels.instance }}"
+          description: "L'utilisation CPU est à {{ $value | humanize }}% sur {{ $labels.instance }}."
+
+      # Alerte si mémoire disponible < 10%
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Mémoire élevée sur {{ $labels.instance }}"
+          description: "L'utilisation mémoire est à {{ $value | humanize }}% sur {{ $labels.instance }}."
+
+      # Alerte si disque disponible < 10%
+      - alert: DiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Espace disque faible sur {{ $labels.instance }}"
+          description: "Le disque {{ $labels.mountpoint }} sur {{ $labels.instance }} est utilisé à {{ $value | humanize }}%."
+
+  # Groupe d'alertes Prometheus
+  - name: prometheus_alerts
+    interval: 30s
+    rules:
+      # Alerte si Prometheus ne peut pas scraper une target
+      - alert: PrometheusTargetDown
+        expr: up{job!="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Target Prometheus down"
+          description: "La target {{ $labels.job }} ({{ $labels.instance }}) est inaccessible."
+
+      # Alerte si trop d'échantillons sont rejetés
+      - alert: PrometheusHighRejectedSamples
+        expr: rate(prometheus_target_scrapes_sample_out_of_order_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus rejette des échantillons"
+          description: "Prometheus rejette {{ $value | humanize }} échantillons/sec de {{ $labels.instance }}."

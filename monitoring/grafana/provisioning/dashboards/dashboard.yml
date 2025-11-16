@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: 'Default'
+    orgId: 1
+    folder: ''                       # Dossier racine
+    type: file
+    disableDeletion: false           # Permet la suppression dans l'UI
+    updateIntervalSeconds: 30        # Intervalle de vérification
+    allowUiUpdates: true             # Permet les modifications UI
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true

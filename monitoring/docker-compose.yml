@@ -1,0 +1,245 @@
+version: '3.8'
+
+# Définition des volumes
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  alertmanager-data:
+    driver: local
+
+# Définition du réseau
+networks:
+  monitoring:
+    driver: bridge
+
+services:
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    
+    # Configuration des volumes
+    volumes:
+      # Configuration principale
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+      # Fichiers d'alertes (par catégorie)
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+
+      # Fichiers de targets (hosts, exporters, applications, etc.)
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+
+      # Ancien fichier d'alertes (pour compatibilité)
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+      # Données Prometheus (TSDB)
+      - prometheus-data:/prometheus
+    
+    # Arguments de démarrage
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'           # Rétention des données
+      - '--storage.tsdb.retention.size=10GB'          # Taille max des données
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'                       # Permet le reload à chaud
+      - '--web.enable-admin-api'                       # Active l'API admin
+    
+    # Exposition des ports
+    ports:
+      - "9090:9090"
+    
+    # Configuration réseau
+    networks:
+      - monitoring
+    
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Limites de ressources
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Alertmanager
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.advertise-address=0.0.0.0:9093'
+    
+    ports:
+      - "9093:9093"
+    
+    networks:
+      - monitoring
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    
+    # Utilisateur (pour éviter les problèmes de permissions)
+    user: "472"
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    
+    environment:
+      # Identifiants par défaut (À CHANGER EN PRODUCTION!)
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      
+      # Configuration serveur
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_SERVER_DOMAIN=localhost
+      
+      # Désactiver l'inscription
+      - GF_USERS_ALLOW_SIGN_UP=false
+      
+      # Configuration logs
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+      
+      # Configuration des plugins
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+    
+    ports:
+      - "3000:3000"
+    
+    networks:
+      - monitoring
+    
+    # Dépendances
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Node Exporter (métriques système)
+  # Note: Sur Windows, node-exporter a des limitations
+  # Il ne peut pas accéder aux métriques système de la même manière que sur Linux
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+
+    # Configuration simplifiée pour Windows
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+    # Sur Windows, on ne peut pas monter / de la même manière
+    # Ces montages ne fonctionnent que partiellement
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+
+    ports:
+      - "9100:9100"
+
+    networks:
+      - monitoring
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    # Profil pour désactiver node-exporter sur Windows si nécessaire
+    profiles:
+      - linux
+
+  # cAdvisor (métriques conteneurs) - Optionnel
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    
+    ports:
+      - "8080:8080"
+    
+    networks:
+      - monitoring
+    
+    privileged: true
+    
+    devices:
+      - /dev/kmsg
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M

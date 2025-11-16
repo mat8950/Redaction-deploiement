@@ -1,0 +1,16 @@
+apiVersion: 1
+
+# Liste des datasources à provisionner
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy                    # proxy = via serveur Grafana
+    url: http://prometheus:9090      # URL du service Prometheus
+    isDefault: true                  # Source de données par défaut
+    editable: true                   # Modifiable dans l'UI
+    jsonData:
+      timeInterval: '15s'            # Intervalle de temps minimum
+      httpMethod: 'POST'             # Méthode HTTP (POST recommandé)
+      exemplarTraceIdDestinations:   # Pour les traces (optionnel)
+        - name: traceID
+          datasourceUid: tempo

@@ -1,0 +1,57 @@
+# Données Docker (volumes persistants)
+monitoring/prometheus/data/
+monitoring/alertmanager/data/
+monitoring/grafana/data/
+
+# Sauvegardes
+monitoring/backups/
+*.tar.gz
+*.backup
+
+# Fichiers de configuration sensibles
+*.env
+.env.local
+.env.production
+
+# Logs
+*.log
+logs/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.cache
+
+# Node modules (si utilisé)
+node_modules/
+
+# Python (si utilisé)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+
+# Certificats et clés
+*.key
+*.pem
+*.crt
+*.p12
+certificates/
+
+# Données de production (à ne pas committer)
+production-data/
+secrets/

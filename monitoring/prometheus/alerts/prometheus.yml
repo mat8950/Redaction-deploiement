@@ -1,0 +1,59 @@
+groups:
+  # Alertes pour Prometheus lui-même
+  - name: prometheus_health
+    interval: 30s
+    rules:
+      # Alerte si Prometheus ne peut pas scraper une target
+      - alert: PrometheusTargetDown
+        expr: up{job!="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Target Prometheus down"
+          description: "La target {{ $labels.job }} ({{ $labels.instance }}) est inaccessible."
+
+      # Alerte si trop d'échantillons sont rejetés
+      - alert: PrometheusHighRejectedSamples
+        expr: rate(prometheus_target_scrapes_sample_out_of_order_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus rejette des échantillons"
+          description: "Prometheus rejette {{ $value | humanize }} échantillons/sec de {{ $labels.instance }}."
+
+      # Alerte si le TSDB est presque plein
+      - alert: PrometheusTSDBFull
+        expr: prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "TSDB Prometheus presque plein"
+          description: "Le stockage TSDB est utilisé à {{ $value | humanizePercentage }} sur {{ $labels.instance }}."
+
+      # Alerte si Prometheus est lent à scraper
+      - alert: PrometheusSlowScrape
+        expr: prometheus_target_interval_length_seconds{quantile="0.9"} > 60
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Scraping Prometheus lent"
+          description: "Le scraping prend {{ $value }}s (quantile 0.9) pour {{ $labels.job }}."
+
+      # Alerte si Prometheus a des problèmes de configuration
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Échec du rechargement de configuration Prometheus"
+          description: "Prometheus n'a pas pu recharger sa configuration sur {{ $labels.instance }}."

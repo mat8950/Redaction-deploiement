@@ -1,0 +1,32 @@
+# Applications à surveiller
+# Services métier, APIs, microservices
+
+# Exemple d'applications
+# Décommenter et adapter selon vos besoins
+
+# API Backend
+# - targets:
+#     - 'api-backend:8080'
+#   labels:
+#     job: 'api-backend'
+#     env: 'production'
+#     team: 'backend'
+#     version: 'v1.2.3'
+
+# Frontend Application
+# - targets:
+#     - 'frontend:3000'
+#   labels:
+#     job: 'frontend'
+#     env: 'production'
+#     team: 'frontend'
+
+# Microservices
+# - targets:
+#     - 'user-service:8081'
+#     - 'auth-service:8082'
+#     - 'payment-service:8083'
+#   labels:
+#     job: 'microservices'
+#     env: 'production'
+#     team: 'platform'

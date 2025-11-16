@@ -1,0 +1,81 @@
+groups:
+  # Alertes pour les ressources système
+  - name: system_resources
+    interval: 30s
+    rules:
+      # Alerte si CPU > 80%
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "CPU élevé sur {{ $labels.instance }}"
+          description: "L'utilisation CPU est à {{ $value | humanize }}% sur {{ $labels.instance }}."
+
+      # Alerte si CPU critique > 95%
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: resources
+        annotations:
+          summary: "CPU critique sur {{ $labels.instance }}"
+          description: "L'utilisation CPU est à {{ $value | humanize }}% sur {{ $labels.instance }}."
+
+      # Alerte si mémoire disponible < 10%
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Mémoire élevée sur {{ $labels.instance }}"
+          description: "L'utilisation mémoire est à {{ $value | humanize }}% sur {{ $labels.instance }}."
+
+      # Alerte si mémoire critique < 5%
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: resources
+        annotations:
+          summary: "Mémoire critique sur {{ $labels.instance }}"
+          description: "L'utilisation mémoire est à {{ $value | humanize }}% sur {{ $labels.instance }}."
+
+      # Alerte si disque disponible < 10%
+      - alert: DiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Espace disque faible sur {{ $labels.instance }}"
+          description: "Le disque {{ $labels.mountpoint }} sur {{ $labels.instance }} est utilisé à {{ $value | humanize }}%."
+
+      # Alerte si disque critique < 5%
+      - alert: CriticalDiskSpace
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: resources
+        annotations:
+          summary: "Espace disque critique sur {{ $labels.instance }}"
+          description: "Le disque {{ $labels.mountpoint }} sur {{ $labels.instance }} est utilisé à {{ $value | humanize }}%."
+
+      # Alerte si load average élevé
+      - alert: HighLoadAverage
+        expr: node_load15 / count(node_cpu_seconds_total{mode="idle"}) by (instance) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Load average élevé sur {{ $labels.instance }}"
+          description: "Le load average (15min) est à {{ $value | humanize }} sur {{ $labels.instance }}."

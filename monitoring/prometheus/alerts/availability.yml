@@ -1,0 +1,40 @@
+groups:
+  # Alertes de disponibilité des services
+  - name: service_availability
+    interval: 30s
+    rules:
+      # Alerte si une instance est down
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Instance {{ $labels.instance }} est down"
+          description: "L'instance {{ $labels.instance }} du job {{ $labels.job }} est inaccessible depuis plus de 2 minutes."
+          dashboard: "http://grafana:3000/d/targets"
+          runbook: "https://wiki.example.com/runbooks/instance-down"
+
+      # Alerte si un service critique est down
+      - alert: CriticalServiceDown
+        expr: up{job=~"api-backend|database|auth-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+          priority: high
+        annotations:
+          summary: "Service critique {{ $labels.job }} est down"
+          description: "Le service critique {{ $labels.job }} ({{ $labels.instance }}) est inaccessible depuis 1 minute."
+
+      # Alerte si plusieurs instances d'un job sont down
+      - alert: MultipleInstancesDown
+        expr: count(up == 0) by (job) > 1
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Plusieurs instances du job {{ $labels.job }} sont down"
+          description: "{{ $value }} instances du job {{ $labels.job }} sont inaccessibles."

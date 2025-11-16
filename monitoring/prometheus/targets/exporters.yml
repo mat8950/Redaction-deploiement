@@ -1,0 +1,39 @@
+# Exporters - Métriques système et conteneurs
+# Node Exporter, cAdvisor, Windows Exporter, etc.
+
+# Node Exporter (Linux)
+# Désactivé sur Windows - décommenter si sur Linux
+# - targets:
+#     - 'node-exporter:9100'
+#   labels:
+#     job: 'node-exporter'
+#     instance: 'docker-host'
+#     env: 'production'
+#     type: 'system'
+
+# cAdvisor (Métriques conteneurs)
+- targets:
+    - 'cadvisor:8080'
+  labels:
+    job: 'cadvisor'
+    instance: 'docker-host'
+    env: 'production'
+    type: 'containers'
+
+# Windows Exporter (décommenter si installé)
+# - targets:
+#     - 'windows-exporter:9182'
+#   labels:
+#     job: 'windows'
+#     instance: 'windows-host'
+#     env: 'production'
+#     type: 'system'
+
+# Blackbox Exporter (monitoring réseau)
+# - targets:
+#     - 'blackbox-exporter:9115'
+#   labels:
+#     job: 'blackbox'
+#     instance: 'blackbox-exporter'
+#     env: 'production'
+#     type: 'network'

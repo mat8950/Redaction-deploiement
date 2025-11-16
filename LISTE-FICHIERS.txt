@@ -1,0 +1,269 @@
+================================================================================
+  DOCUMENTATION COMPLÈTE : GRAFANA + PROMETHEUS + ALERTMANAGER
+================================================================================
+
+📦 PACKAGE COMPLET POUR DÉPLOIEMENT SIMPLIFIÉ
+
+================================================================================
+  FICHIERS DE DOCUMENTATION
+================================================================================
+
+📄 DEMARRAGE-RAPIDE.md
+   ├─ Guide ultra-rapide (5 minutes)
+   ├─ Commandes essentielles
+   └─ Dépannage rapide
+
+📘 deploiement-monitoring-docker.md (PRINCIPAL)
+   ├─ Guide complet Docker (70+ pages)
+   ├─ Architecture détaillée
+   ├─ Configuration paramètre par paramètre
+   ├─ Docker Compose expliqué
+   ├─ Prometheus : configuration complète
+   ├─ Alertmanager : routage et notifications
+   ├─ Grafana : provisioning automatique
+   ├─ Règles d'alertes pré-configurées
+   ├─ Exemples de requêtes PromQL
+   ├─ Vérification et tests
+   ├─ Maintenance et sauvegarde
+   └─ Sécurisation pour production
+
+📗 deploiement-monitoring-debian.md
+   ├─ Guide installation native Debian (50+ pages)
+   ├─ Installation sans Docker
+   ├─ Services systemd
+   ├─ Configuration manuelle
+   ├─ Pare-feu (UFW + iptables)
+   ├─ HTTPS avec Nginx
+   └─ Maintenance et mises à jour
+
+================================================================================
+  PROJET PRÊT À DÉPLOYER : monitoring/
+================================================================================
+
+📁 monitoring/
+│
+├── 🚀 SCRIPTS AUTOMATIQUES
+│   ├── deploy.sh              ← Déploiement automatique (start/stop/restart)
+│   ├── test.sh                ← Tests automatiques de la stack
+│   └── README.md              ← Documentation utilisateur complète
+│
+├── 🐳 DOCKER
+│   └── docker-compose.yml     ← Configuration Docker Compose complète
+│                                 • Prometheus
+│                                 • Alertmanager
+│                                 • Grafana
+│                                 • Node Exporter
+│                                 • cAdvisor
+│
+├── 📊 PROMETHEUS
+│   ├── prometheus.yml         ← Configuration principale
+│   │                             • Global settings
+│   │                             • Alertmanager config
+│   │                             • Scrape configs (5 jobs)
+│   │                             • Règles d'alertes
+│   │
+│   └── alerts.yml            ← Règles d'alertes (12 alertes)
+│                                • Disponibilité (InstanceDown)
+│                                • Ressources système (CPU, RAM, Disk)
+│                                • Monitoring (Prometheus, targets)
+│                                • Conteneurs Docker
+│
+├── 🔔 ALERTMANAGER
+│   └── alertmanager.yml      ← Configuration des alertes
+│                                • Routage par sévérité
+│                                • Grouping et throttling
+│                                • Receivers (email, Slack, webhook)
+│                                • Inhibition rules
+│
+├── 📈 GRAFANA
+│   └── provisioning/
+│       ├── datasources/
+│       │   └── prometheus.yml ← Datasource Prometheus (auto-config)
+│       │
+│       └── dashboards/
+│           └── dashboard.yml  ← Configuration dashboards
+│
+└── ⚙️ CONFIGURATION
+    ├── .env.example           ← Variables d'environnement
+    └── .gitignore            ← Fichiers à ignorer
+
+================================================================================
+  UTILISATION RAPIDE
+================================================================================
+
+🚀 DÉMARRAGE EN 3 ÉTAPES :
+
+   1. cd monitoring
+   2. ./deploy.sh start
+   3. Ouvrir http://localhost:3000 (admin/admin123)
+
+📋 COMMANDES DISPONIBLES :
+
+   ./deploy.sh start      → Démarre tous les services
+   ./deploy.sh stop       → Arrête tous les services
+   ./deploy.sh restart    → Redémarre tous les services
+   ./deploy.sh status     → Affiche le statut
+   ./deploy.sh logs       → Affiche les logs
+   ./deploy.sh validate   → Valide les configurations
+   ./deploy.sh backup     → Crée une sauvegarde
+   ./deploy.sh urls       → Affiche les URLs d'accès
+
+   ./test.sh             → Lance les tests automatiques
+
+================================================================================
+  SERVICES DÉPLOYÉS
+================================================================================
+
+🌐 INTERFACES WEB :
+
+   📊 Grafana           http://localhost:3000
+      └─ admin / admin123
+
+   📈 Prometheus        http://localhost:9090
+      ├─ /targets       → Status des targets
+      ├─ /alerts        → Alertes actives
+      └─ /graph         → Interface de requêtes
+
+   🔔 Alertmanager      http://localhost:9093
+      └─ Gestion des alertes
+
+   🖥️  Node Exporter    http://localhost:9100/metrics
+      └─ Métriques système
+
+   🐳 cAdvisor          http://localhost:8080
+      └─ Métriques conteneurs
+
+================================================================================
+  MÉTRIQUES SURVEILLÉES
+================================================================================
+
+✅ SYSTÈME :
+   • CPU > 80%
+   • Mémoire > 90%
+   • Disque > 90%
+   • Services down
+
+✅ CONTENEURS :
+   • CPU conteneurs
+   • Mémoire conteneurs
+   • Réseau conteneurs
+
+✅ MONITORING :
+   • Targets Prometheus
+   • Échantillons rejetés
+   • Disponibilité services
+
+================================================================================
+  ALERTES CONFIGURÉES
+================================================================================
+
+🚨 CRITICAL :
+   • InstanceDown              → Instance inaccessible 2+ min
+   • PrometheusTargetDown      → Target Prometheus down
+
+⚠️  WARNING :
+   • HighCPUUsage              → CPU > 80% pendant 5 min
+   • HighMemoryUsage           → RAM > 90% pendant 5 min
+   • DiskSpaceLow              → Disque > 90%
+   • ContainerHighCPU          → Conteneur > 80% CPU
+   • ContainerHighMemory       → Conteneur > 90% RAM
+   • PrometheusHighRejectedSamples
+
+================================================================================
+  CARACTÉRISTIQUES
+================================================================================
+
+✨ POINTS FORTS :
+
+   ✅ Installation en 1 commande
+   ✅ Configuration validée et testée
+   ✅ 12 alertes pré-configurées
+   ✅ Scripts de maintenance inclus
+   ✅ Tests automatiques
+   ✅ Documentation exhaustive (120+ pages)
+   ✅ Support Docker ET Debian natif
+   ✅ Métriques système + conteneurs
+   ✅ Grafana pré-configuré
+   ✅ Sauvegarde automatisée
+   ✅ Healthchecks actifs
+   ✅ Limites de ressources définies
+   ✅ Réseau isolé
+   ✅ Rétention configurable (15 jours / 10GB)
+
+================================================================================
+  PRÉREQUIS
+================================================================================
+
+🔧 DOCKER :
+   • Docker Engine 20.10+
+   • Docker Compose 2.0+
+   • 2 GB RAM minimum
+   • 10 GB espace disque
+
+🔧 DEBIAN NATIF :
+   • Debian 11 ou 12
+   • 2 GB RAM minimum
+   • 20 GB espace disque
+   • Accès root/sudo
+
+================================================================================
+  PROCHAINES ÉTAPES
+================================================================================
+
+1. 📊 DASHBOARDS
+   → Importer des dashboards depuis grafana.com
+   → Créer vos propres dashboards
+
+2. 🔔 NOTIFICATIONS
+   → Configurer Email (SMTP)
+   → Configurer Slack / Teams / PagerDuty
+   → Tester les alertes
+
+3. 🎯 APPLICATIONS
+   → Ajouter vos applications à monitorer
+   → Exposer /metrics dans vos apps
+   → Configurer les targets Prometheus
+
+4. 🔒 PRODUCTION
+   → Changer les mots de passe
+   → Configurer HTTPS
+   → Restreindre les accès
+   → Mettre en place les backups
+
+================================================================================
+  SÉCURITÉ (IMPORTANT!)
+================================================================================
+
+⚠️  AVANT LA PRODUCTION :
+
+   🔐 Changer le mot de passe Grafana (admin/admin123)
+   🔐 Configurer HTTPS (Nginx/Traefik + Let's Encrypt)
+   🔐 Activer l'authentification Prometheus
+   🔐 Restreindre l'accès par IP
+   🔐 Configurer les backups réguliers
+   🔐 Surveiller l'espace disque
+
+================================================================================
+  SUPPORT ET DOCUMENTATION
+================================================================================
+
+📚 GUIDES DISPONIBLES :
+
+   • DEMARRAGE-RAPIDE.md              → 5 minutes chrono
+   • deploiement-monitoring-docker.md  → Guide complet Docker
+   • deploiement-monitoring-debian.md  → Guide complet Debian
+   • monitoring/README.md              → Documentation utilisateur
+
+🔗 RESSOURCES OFFICIELLES :
+
+   • Prometheus  : https://prometheus.io/docs/
+   • Grafana     : https://grafana.com/docs/
+   • Alertmanager: https://prometheus.io/docs/alerting/
+
+================================================================================
+
+✨ PRÊT POUR LE DÉPLOIEMENT ! ✨
+
+   Commencez par : cd monitoring && ./deploy.sh start
+
+================================================================================

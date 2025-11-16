@@ -1,0 +1,48 @@
+groups:
+  # Alertes pour les conteneurs Docker
+  - name: container_alerts
+    interval: 30s
+    rules:
+      # Alerte si un conteneur utilise trop de CPU
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Conteneur {{ $labels.name }} utilise beaucoup de CPU"
+          description: "Le conteneur {{ $labels.name }} utilise {{ $value | humanize }}% de CPU."
+
+      # Alerte si un conteneur utilise trop de mémoire
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Conteneur {{ $labels.name }} utilise beaucoup de mémoire"
+          description: "Le conteneur {{ $labels.name }} utilise {{ $value | humanize }}% de sa limite mémoire."
+
+      # Alerte si un conteneur redémarre fréquemment
+      - alert: ContainerFrequentRestarts
+        expr: rate(container_last_seen{name!=""}[1h]) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Conteneur {{ $labels.name }} redémarre fréquemment"
+          description: "Le conteneur {{ $labels.name }} redémarre {{ $value | humanize }} fois/heure."
+
+      # Alerte si un conteneur est arrêté de manière inattendue
+      - alert: ContainerDown
+        expr: time() - container_last_seen{name!=""} > 60
+        for: 2m
+        labels:
+          severity: critical
+          category: containers
+        annotations:
+          summary: "Conteneur {{ $labels.name }} est arrêté"
+          description: "Le conteneur {{ $labels.name }} n'a pas été vu depuis {{ $value }}s."

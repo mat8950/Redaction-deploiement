@@ -1,0 +1,124 @@
+# Configuration globale de Prometheus
+global:
+  scrape_interval: 15s              # Fréquence de collecte des métriques
+  evaluation_interval: 15s          # Fréquence d'évaluation des règles
+  scrape_timeout: 10s               # Timeout pour chaque scrape
+
+  # Labels externes ajoutés à toutes les métriques
+  external_labels:
+    cluster: 'docker-monitoring'
+    environment: 'production'
+    region: 'eu-west-1'             # Adapter selon votre région
+
+# Configuration Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Chargement des règles d'alertes (fichiers séparés par catégorie)
+rule_files:
+  # Alertes de disponibilité
+  - '/etc/prometheus/alerts/availability.yml'
+
+  # Alertes de ressources système
+  - '/etc/prometheus/alerts/resources.yml'
+
+  # Alertes pour Prometheus lui-même
+  - '/etc/prometheus/alerts/prometheus.yml'
+
+  # Alertes pour les conteneurs Docker
+  - '/etc/prometheus/alerts/containers.yml'
+
+  # Alertes pour les bases de données
+  - '/etc/prometheus/alerts/databases.yml'
+
+  # Ancien fichier d'alertes (pour compatibilité)
+  # Peut être supprimé une fois la migration terminée
+  - '/etc/prometheus/alerts.yml'
+
+# Configuration des targets à monitorer
+scrape_configs:
+  # ========================================
+  # Stack de monitoring (Prometheus, Grafana, Alertmanager)
+  # ========================================
+  - job_name: 'monitoring-stack'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/monitoring-stack.yml'
+    relabel_configs:
+      # Ajouter un label "monitored_by"
+      - source_labels: [__address__]
+        target_label: monitored_by
+        replacement: 'prometheus'
+
+  # ========================================
+  # Exporters (Node Exporter, cAdvisor, etc.)
+  # ========================================
+  - job_name: 'exporters'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/exporters.yml'
+        refresh_interval: 30s         # Rafraîchir toutes les 30s
+
+  # ========================================
+  # Hosts à surveiller (serveurs, machines)
+  # ========================================
+  - job_name: 'hosts'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/hosts.yml'
+        refresh_interval: 1m          # Rafraîchir toutes les minutes
+
+  # ========================================
+  # Applications (APIs, microservices)
+  # ========================================
+  - job_name: 'applications'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/applications.yml'
+        refresh_interval: 30s
+    # Exemple de relabeling pour les applications
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+
+  # ========================================
+  # Bases de données (PostgreSQL, MySQL, etc.)
+  # ========================================
+  - job_name: 'databases'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/databases.yml'
+        refresh_interval: 1m
+    # Métriques sensibles - augmenter la rétention
+    scrape_interval: 30s
+    scrape_timeout: 15s
+
+  # ========================================
+  # Blackbox Exporter (monitoring réseau/HTTP)
+  # ========================================
+  # Décommenter si vous utilisez Blackbox Exporter
+  # - job_name: 'blackbox-http'
+  #   metrics_path: /probe
+  #   params:
+  #     module: [http_2xx]
+  #   file_sd_configs:
+  #     - files:
+  #         - '/etc/prometheus/targets/blackbox-http.yml'
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: blackbox-exporter:9115
+
+  # ========================================
+  # Configuration personnalisée
+  # ========================================
+  # Ajoutez ici vos configurations spécifiques
+  # Exemple: monitoring de services Kubernetes, EC2, etc.

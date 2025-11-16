@@ -1,0 +1,76 @@
+groups:
+  # Alertes pour les bases de données
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL - Connexions élevées
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          db_type: postgresql
+        annotations:
+          summary: "PostgreSQL {{ $labels.instance }} a beaucoup de connexions"
+          description: "PostgreSQL utilise {{ $value | humanizePercentage }} de ses connexions maximum."
+
+      # PostgreSQL - Réplication en retard
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          db_type: postgresql
+        annotations:
+          summary: "Réplication PostgreSQL en retard sur {{ $labels.instance }}"
+          description: "La réplication a {{ $value }}s de retard."
+
+      # MySQL - Connexions élevées
+      - alert: MySQLHighConnections
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          db_type: mysql
+        annotations:
+          summary: "MySQL {{ $labels.instance }} a beaucoup de connexions"
+          description: "MySQL utilise {{ $value | humanizePercentage }} de ses connexions maximum."
+
+      # MySQL - Slow queries
+      - alert: MySQLSlowQueries
+        expr: rate(mysql_global_status_slow_queries[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          db_type: mysql
+        annotations:
+          summary: "MySQL {{ $labels.instance }} a des requêtes lentes"
+          description: "MySQL a {{ $value }} requêtes lentes par seconde."
+
+      # Redis - Mémoire élevée
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          db_type: redis
+        annotations:
+          summary: "Redis {{ $labels.instance }} utilise beaucoup de mémoire"
+          description: "Redis utilise {{ $value | humanizePercentage }} de sa mémoire maximum."
+
+      # MongoDB - Connexions élevées
+      - alert: MongoDBHighConnections
+        expr: mongodb_connections{state="current"} / mongodb_connections{state="available"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          db_type: mongodb
+        annotations:
+          summary: "MongoDB {{ $labels.instance }} a beaucoup de connexions"
+          description: "MongoDB utilise {{ $value | humanizePercentage }} de ses connexions disponibles."
