@@ -1,0 +1,682 @@
+version: '3.8'
+
+# ============================================
+# DOCKER COMPOSE COMPLET - Stack de Monitoring
+# Prometheus (Standalone + Fédération) + Grafana + Alertmanager
+# Avec TLS, Rétention optimisée, toutes options
+# ============================================
+
+# Définition des volumes
+volumes:
+  # Prometheus
+  prometheus-data:
+    driver: local
+  prometheus-central-data:
+    driver: local
+  prometheus-edge-data:
+    driver: local
+
+  # Grafana
+  grafana-data:
+    driver: local
+
+  # Alertmanager
+  alertmanager-data:
+    driver: local
+
+  # Nginx (pour TLS/reverse proxy)
+  nginx-certs:
+    driver: local
+
+# Définition des réseaux
+networks:
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+services:
+  # ============================================
+  # PROMETHEUS STANDALONE (Configuration Standard)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    hostname: prometheus
+
+    # Volumes
+    volumes:
+      # Configuration principale
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+      # Fichiers d'alertes modulaires
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+
+      # Fichiers de targets modulaires
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+
+      # Règles d'agrégation
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+
+      # Ancien fichier d'alertes (compatibilité)
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+      # Données TSDB
+      - prometheus-data:/prometheus
+
+      # TLS (si activé)
+      - ./certs:/etc/prometheus/certs:ro
+
+    # Configuration avancée avec toutes les options
+    command:
+      # Fichier de configuration
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+      # Stockage TSDB
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'              # Rétention temporelle
+      - '--storage.tsdb.retention.size=15GB'             # Rétention par taille
+      - '--storage.tsdb.min-block-duration=2h'           # Durée min des blocs
+      - '--storage.tsdb.max-block-duration=36h'          # Durée max des blocs
+      - '--storage.tsdb.wal-compression'                 # Compression WAL
+
+      # Interface Web
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.listen-address=:9090'                     # Adresse d'écoute
+      - '--web.enable-lifecycle'                         # Hot reload (curl -X POST /-/reload)
+      - '--web.enable-admin-api'                         # API admin
+      - '--web.page-title=Prometheus Monitoring'         # Titre de la page
+      - '--web.cors.origin=.*'                           # CORS (à restreindre en prod)
+
+      # TLS (décommenter si certificats disponibles)
+      # - '--web.config.file=/etc/prometheus/web-config.yml'
+
+      # Query
+      - '--query.timeout=2m'                             # Timeout des requêtes
+      - '--query.max-concurrency=20'                     # Requêtes simultanées max
+      - '--query.max-samples=50000000'                   # Échantillons max par requête
+      - '--query.lookback-delta=5m'                      # Lookback par défaut
+
+      # Logging
+      - '--log.level=info'                               # debug, info, warn, error
+      - '--log.format=logfmt'                            # logfmt ou json
+
+    # Exposition des ports
+    ports:
+      - "9090:9090"
+
+    # Configuration réseau
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.10
+
+    # Labels
+    labels:
+      - "monitoring.role=prometheus"
+      - "monitoring.type=standalone"
+
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Limites de ressources
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+    # Variables d'environnement
+    environment:
+      - TZ=Europe/Paris
+
+  # ============================================
+  # PROMETHEUS CENTRAL (Fédération Hub)
+  # ============================================
+  prometheus-central:
+    image: prom/prometheus:latest
+    container_name: prometheus-central
+    restart: unless-stopped
+    hostname: prometheus-central
+
+    volumes:
+      - ./prometheus/prometheus-central.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+      - prometheus-central-data:/prometheus
+      - ./certs:/etc/prometheus/certs:ro
+
+    command:
+      # Configuration
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+      # Stockage - Rétention longue pour le central
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'              # 3 mois de données
+      - '--storage.tsdb.retention.size=50GB'             # 50 GB max
+      - '--storage.tsdb.min-block-duration=2h'
+      - '--storage.tsdb.max-block-duration=36h'
+      - '--storage.tsdb.wal-compression'
+
+      # Interface Web
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.listen-address=:9090'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.page-title=Prometheus Central (Federation Hub)'
+      - '--web.cors.origin=.*'
+
+      # Query - Optimisé pour agrégations
+      - '--query.timeout=5m'                             # Timeout plus long
+      - '--query.max-concurrency=30'
+      - '--query.max-samples=100000000'                  # Plus d'échantillons
+      - '--query.lookback-delta=5m'
+
+      # Logging
+      - '--log.level=info'
+      - '--log.format=json'                              # JSON pour parsing
+
+    ports:
+      - "9095:9090"                                       # Port différent
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.11
+
+    labels:
+      - "monitoring.role=prometheus"
+      - "monitoring.type=federation-hub"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+
+    environment:
+      - TZ=Europe/Paris
+
+    # Désactivé par défaut - à activer si fédération nécessaire
+    profiles:
+      - federation
+
+  # ============================================
+  # PROMETHEUS EDGE Site 1 (Local Collector)
+  # ============================================
+  prometheus-edge:
+    image: prom/prometheus:latest
+    container_name: prometheus-edge
+    restart: unless-stopped
+    hostname: prometheus-edge
+
+    volumes:
+      - ./prometheus/prometheus-edge.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-edge-data:/prometheus
+      - ./certs:/etc/prometheus/certs:ro
+
+    command:
+      # Configuration
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+      # Stockage - Rétention courte pour l'edge
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'              # 15 jours
+      - '--storage.tsdb.retention.size=10GB'
+      - '--storage.tsdb.min-block-duration=2h'
+      - '--storage.tsdb.max-block-duration=24h'          # Blocs plus courts
+      - '--storage.tsdb.wal-compression'
+
+      # Interface Web
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.listen-address=:9090'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.page-title=Prometheus Edge Site 1'
+      - '--web.cors.origin=.*'
+
+      # Query
+      - '--query.timeout=2m'
+      - '--query.max-concurrency=20'
+      - '--query.max-samples=50000000'
+      - '--query.lookback-delta=5m'
+
+      # Logging
+      - '--log.level=info'
+      - '--log.format=logfmt'
+
+    ports:
+      - "9091:9090"
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.12
+
+    labels:
+      - "monitoring.role=prometheus"
+      - "monitoring.type=edge-collector"
+      - "monitoring.site=site1"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+    environment:
+      - TZ=Europe/Paris
+
+    # Désactivé par défaut - à activer si fédération nécessaire
+    profiles:
+      - federation
+
+  # ============================================
+  # ALERTMANAGER
+  # ============================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    hostname: alertmanager
+
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - alertmanager-data:/alertmanager
+      - ./certs:/etc/alertmanager/certs:ro
+
+    command:
+      # Configuration
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+
+      # Stockage
+      - '--storage.path=/alertmanager'
+
+      # Clustering (haute disponibilité)
+      - '--cluster.listen-address=0.0.0.0:9094'          # Port clustering
+      - '--cluster.advertise-address=172.20.0.20:9094'   # Adresse annoncée
+      # Pour ajouter des peers:
+      # - '--cluster.peer=alertmanager2:9094'
+
+      # Web
+      - '--web.listen-address=:9093'
+      - '--web.external-url=http://localhost:9093'
+      - '--web.route-prefix=/'
+
+      # TLS (décommenter si certificats disponibles)
+      # - '--web.config.file=/etc/alertmanager/web-config.yml'
+
+      # Logging
+      - '--log.level=info'
+      - '--log.format=logfmt'
+
+      # Alertes
+      - '--alerts.gc-interval=30m'                       # Nettoyage des vieilles alertes
+
+    ports:
+      - "9093:9093"
+      - "9094:9094"                                       # Port clustering
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.20
+
+    labels:
+      - "monitoring.role=alertmanager"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    environment:
+      - TZ=Europe/Paris
+
+  # ============================================
+  # GRAFANA
+  # ============================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    hostname: grafana
+
+    user: "472"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./certs:/etc/grafana/certs:ro
+
+    environment:
+      # ===== Identifiants (À CHANGER EN PRODUCTION!) =====
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_SECRET_KEY=SW2YcwTIb9zpOOhoPsMm         # Générer avec: openssl rand -base64 32
+
+      # ===== Serveur =====
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ENFORCE_DOMAIN=false
+      - GF_SERVER_PROTOCOL=http                            # http ou https
+      # TLS (décommenter si HTTPS)
+      # - GF_SERVER_CERT_FILE=/etc/grafana/certs/grafana.crt
+      # - GF_SERVER_CERT_KEY=/etc/grafana/certs/grafana.key
+
+      # ===== Database (SQLite par défaut) =====
+      - GF_DATABASE_TYPE=sqlite3
+      - GF_DATABASE_PATH=/var/lib/grafana/grafana.db
+      # Pour PostgreSQL:
+      # - GF_DATABASE_TYPE=postgres
+      # - GF_DATABASE_HOST=postgres:5432
+      # - GF_DATABASE_NAME=grafana
+      # - GF_DATABASE_USER=grafana
+      # - GF_DATABASE_PASSWORD=grafana_password
+
+      # ===== Utilisateurs =====
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+      - GF_USERS_AUTO_ASSIGN_ORG=true
+      - GF_USERS_AUTO_ASSIGN_ORG_ROLE=Viewer
+      - GF_USERS_DEFAULT_THEME=dark
+
+      # ===== Authentification =====
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_AUTH_DISABLE_SIGNOUT_MENU=false
+
+      # OAuth (exemple Google)
+      # - GF_AUTH_GOOGLE_ENABLED=true
+      # - GF_AUTH_GOOGLE_CLIENT_ID=your-client-id
+      # - GF_AUTH_GOOGLE_CLIENT_SECRET=your-client-secret
+      # - GF_AUTH_GOOGLE_SCOPES=https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email
+      # - GF_AUTH_GOOGLE_AUTH_URL=https://accounts.google.com/o/oauth2/auth
+      # - GF_AUTH_GOOGLE_TOKEN_URL=https://accounts.google.com/o/oauth2/token
+      # - GF_AUTH_GOOGLE_ALLOWED_DOMAINS=example.com
+
+      # ===== Logging =====
+      - GF_LOG_MODE=console file
+      - GF_LOG_LEVEL=info                                  # debug, info, warn, error, critical
+      - GF_LOG_FILTERS=rendering:debug
+
+      # ===== Métriques =====
+      - GF_METRICS_ENABLED=true
+      - GF_METRICS_INTERVAL_SECONDS=10
+
+      # ===== Alerting =====
+      - GF_ALERTING_ENABLED=true
+      - GF_ALERTING_EXECUTE_ALERTS=true
+
+      # ===== SMTP (pour les notifications) =====
+      - GF_SMTP_ENABLED=false
+      # - GF_SMTP_HOST=smtp.gmail.com:587
+      # - GF_SMTP_USER=your-email@gmail.com
+      # - GF_SMTP_PASSWORD=your-app-password
+      # - GF_SMTP_FROM_ADDRESS=grafana@example.com
+      # - GF_SMTP_FROM_NAME=Grafana
+
+      # ===== Plugins =====
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel,grafana-worldmap-panel
+
+      # ===== Dashboards =====
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/home.json
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=5s
+
+      # ===== Panels =====
+      - GF_PANELS_DISABLE_SANITIZE_HTML=false
+
+      # ===== Security =====
+      - GF_SECURITY_COOKIE_SECURE=false                    # true si HTTPS
+      - GF_SECURITY_COOKIE_SAMESITE=lax
+      - GF_SECURITY_CONTENT_SECURITY_POLICY=true
+
+      # ===== Autres =====
+      - GF_EXPLORE_ENABLED=true
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+
+      # Timezone
+      - TZ=Europe/Paris
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.30
+
+    labels:
+      - "monitoring.role=grafana"
+
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+  # ============================================
+  # NODE EXPORTER (Métriques système Linux)
+  # ============================================
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    hostname: node-exporter
+
+    command:
+      # Chemins
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+
+      # Collecteurs (activer/désactiver)
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.netclass.ignored-devices=^(veth.*|docker.*|br-.*|lo)$$'
+      - '--collector.netdev.device-exclude=^(veth.*|docker.*|br-.*|lo)$$'
+
+      # Collecteurs optionnels (décommenter si nécessaire)
+      # - '--collector.systemd'                            # Métriques systemd
+      # - '--collector.processes'                          # Processus
+      # - '--collector.tcpstat'                            # Stats TCP
+
+      # Désactiver certains collecteurs
+      # - '--no-collector.arp'
+      # - '--no-collector.bcache'
+      # - '--no-collector.bonding'
+
+      # Web
+      - '--web.listen-address=:9100'
+      - '--web.telemetry-path=/metrics'
+      - '--web.max-requests=40'
+
+      # Logging
+      - '--log.level=info'
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    ports:
+      - "9100:9100"
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.40
+
+    labels:
+      - "monitoring.role=exporter"
+      - "monitoring.exporter=node"
+
+    # Désactivé sur Windows par défaut
+    profiles:
+      - linux
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ============================================
+  # CADVISOR (Métriques conteneurs Docker)
+  # ============================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    hostname: cadvisor
+
+    command:
+      # Stockage
+      - '--storage_duration=2m0s'                          # Garder 2 min en mémoire
+      - '--housekeeping_interval=30s'                      # Nettoyage toutes les 30s
+
+      # Docker
+      - '--docker_only=true'                               # Seulement Docker
+
+      # Métriques
+      - '--disable_metrics=disk,diskIO,network,tcp,udp,percpu,sched,process'  # Désactiver certaines
+
+      # Web
+      - '--port=8080'
+
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.41
+
+    labels:
+      - "monitoring.role=exporter"
+      - "monitoring.exporter=cadvisor"
+
+    privileged: true
+
+    devices:
+      - /dev/kmsg
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ============================================
+  # NGINX (Reverse Proxy avec TLS)
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    hostname: nginx
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+      - nginx-certs:/etc/letsencrypt
+
+    ports:
+      - "80:80"                                           # HTTP
+      - "443:443"                                         # HTTPS
+
+    networks:
+      monitoring:
+        ipv4_address: 172.20.0.50
+
+    labels:
+      - "monitoring.role=proxy"
+
+    depends_on:
+      - prometheus
+      - grafana
+
+    # Désactivé par défaut - activer si TLS/reverse proxy nécessaire
+    profiles:
+      - tls
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    environment:
+      - TZ=Europe/Paris

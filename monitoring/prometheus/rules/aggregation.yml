@@ -1,0 +1,154 @@
+# Règles d'agrégation pour la fédération
+# Ces règles pré-calculent des métriques agrégées pour réduire la charge sur le Prometheus central
+
+groups:
+  # ========================================
+  # Agrégations Système (Node Exporter)
+  # ========================================
+  - name: node_aggregations
+    interval: 30s
+    rules:
+      # CPU moyen par host
+      - record: instance:node_cpu_utilization:avg
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Mémoire disponible en pourcentage par host
+      - record: instance:node_memory_available:percent
+        expr: |
+          (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+
+      # Utilisation disque par host et point de montage
+      - record: instance:node_filesystem_usage:percent
+        expr: |
+          (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100
+
+      # Load average normalisé par nombre de CPU
+      - record: instance:node_load_normalized:avg
+        expr: |
+          node_load15 / count(node_cpu_seconds_total{mode="idle"}) by (instance)
+
+      # Réseau total (in+out) par seconde
+      - record: instance:node_network_total:rate
+        expr: |
+          sum by (instance) (
+            rate(node_network_receive_bytes_total[5m]) +
+            rate(node_network_transmit_bytes_total[5m])
+          )
+
+  # ========================================
+  # Agrégations par Job
+  # ========================================
+  - name: job_aggregations
+    interval: 30s
+    rules:
+      # Nombre d'instances UP par job
+      - record: job:up:count
+        expr: |
+          count by (job) (up == 1)
+
+      # Nombre total d'instances par job
+      - record: job:instances:count
+        expr: |
+          count by (job) (up)
+
+      # Taux de disponibilité par job (%)
+      - record: job:availability:percent
+        expr: |
+          (sum by (job) (up == 1) / count by (job) (up)) * 100
+
+  # ========================================
+  # Agrégations HTTP (si applicable)
+  # ========================================
+  - name: http_aggregations
+    interval: 30s
+    rules:
+      # Taux de requêtes par seconde par job
+      - record: job:http_requests:rate
+        expr: |
+          sum by (job) (rate(http_requests_total[5m]))
+
+      # Latence P95 par job
+      - record: job:http_request_duration:p95
+        expr: |
+          histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # Taux d'erreur par job (%)
+      - record: job:http_error_rate:percent
+        expr: |
+          (
+            sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum by (job) (rate(http_requests_total[5m]))
+          ) * 100
+
+  # ========================================
+  # Agrégations Conteneurs (cAdvisor)
+  # ========================================
+  - name: container_aggregations
+    interval: 30s
+    rules:
+      # CPU par conteneur
+      - record: container:cpu_usage:rate
+        expr: |
+          rate(container_cpu_usage_seconds_total{name!=""}[5m])
+
+      # Mémoire par conteneur en %
+      - record: container:memory_usage:percent
+        expr: |
+          (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100
+
+      # Réseau total par conteneur
+      - record: container:network_total:rate
+        expr: |
+          sum by (name) (
+            rate(container_network_receive_bytes_total{name!=""}[5m]) +
+            rate(container_network_transmit_bytes_total{name!=""}[5m])
+          )
+
+  # ========================================
+  # Agrégations par Datacenter/Site
+  # ========================================
+  - name: site_aggregations
+    interval: 1m
+    rules:
+      # Nombre total d'instances par site
+      - record: site:instances:count
+        expr: |
+          count by (datacenter, site) (up)
+
+      # Nombre d'instances UP par site
+      - record: site:up:count
+        expr: |
+          count by (datacenter, site) (up == 1)
+
+      # CPU moyen par site
+      - record: site:cpu_utilization:avg
+        expr: |
+          avg by (datacenter, site) (instance:node_cpu_utilization:avg)
+
+      # Mémoire moyenne disponible par site
+      - record: site:memory_available:avg
+        expr: |
+          avg by (datacenter, site) (instance:node_memory_available:percent)
+
+  # ========================================
+  # Agrégations Temporelles (sur 1h, 24h)
+  # ========================================
+  - name: temporal_aggregations
+    interval: 5m
+    rules:
+      # CPU moyen sur 1h
+      - record: instance:node_cpu_utilization:avg1h
+        expr: |
+          avg_over_time(instance:node_cpu_utilization:avg[1h])
+
+      # Disponibilité sur 24h
+      - record: instance:availability:avg24h
+        expr: |
+          avg_over_time(up[24h]) * 100
+
+      # Taux de requêtes moyen sur 1h
+      - record: job:http_requests:avg1h
+        expr: |
+          avg_over_time(job:http_requests:rate[1h])

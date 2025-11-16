@@ -1,0 +1,37 @@
+# Configuration TLS pour Prometheus
+# https://prometheus.io/docs/prometheus/latest/configuration/https/
+
+tls_server_config:
+  # Certificat et clé privée
+  cert_file: /etc/prometheus/certs/prometheus.crt
+  key_file: /etc/prometheus/certs/prometheus.key
+
+  # Version TLS minimum
+  min_version: TLS12
+
+  # Ciphers autorisés (sécurisés)
+  cipher_suites:
+    - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+
+  # Courbes elliptiques
+  curve_preferences:
+    - CurveP256
+    - CurveP384
+    - CurveP521
+
+  # Activer HTTP/2
+  prefer_server_cipher_suites: true
+
+# Authentification Basic Auth (optionnel)
+# Générer avec: htpasswd -nBC 10 "" | tr -d ':\n'
+basic_auth_users:
+  admin: $2y$10$...bcrypt_hash_here...
+  # viewer: $2y$10$...another_hash...
+
+# Authentification TLS mutuelle (mTLS) - optionnel
+# http_server_config:
+#   client_auth_type: RequireAndVerifyClientCert
+#   client_ca_file: /etc/prometheus/certs/ca.crt

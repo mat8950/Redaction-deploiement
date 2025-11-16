@@ -1,0 +1,85 @@
+# Configuration Prometheus EDGE (local)
+# Ce Prometheus collecte les métriques locales et les expose pour la fédération
+
+global:
+  scrape_interval: 15s              # Intervalle standard pour collecte locale
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  # Labels externes pour identifier ce site
+  external_labels:
+    cluster: 'edge-monitoring'
+    role: 'edge-collector'
+    site: 'site1'                   # À changer pour chaque site
+    datacenter: 'dc1'
+    region: 'eu-west-1'
+    environment: 'production'
+
+# Configuration Alertmanager (local)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Règles d'alertes locales
+rule_files:
+  # Règles de pré-agrégation pour la fédération
+  - '/etc/prometheus/rules/aggregation.yml'
+
+  # Alertes locales
+  - '/etc/prometheus/alerts/availability.yml'
+  - '/etc/prometheus/alerts/resources.yml'
+  - '/etc/prometheus/alerts/prometheus.yml'
+  - '/etc/prometheus/alerts/containers.yml'
+  - '/etc/prometheus/alerts/databases.yml'
+
+# Configuration des targets à monitorer (LOCAL)
+scrape_configs:
+  # ========================================
+  # Infrastructure Locale
+  # ========================================
+
+  # Monitoring stack locale
+  - job_name: 'monitoring-stack'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/monitoring-stack.yml'
+
+  # Exporters locaux
+  - job_name: 'exporters'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/exporters.yml'
+        refresh_interval: 30s
+
+  # Hosts locaux
+  - job_name: 'hosts'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/hosts.yml'
+        refresh_interval: 1m
+
+  # Applications locales
+  - job_name: 'applications'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/applications.yml'
+        refresh_interval: 30s
+
+  # Bases de données locales
+  - job_name: 'databases'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/databases.yml'
+        refresh_interval: 1m
+
+  # ========================================
+  # Auto-monitoring
+  # ========================================
+  - job_name: 'prometheus-edge'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'prometheus-edge'
+          role: 'edge-collector'

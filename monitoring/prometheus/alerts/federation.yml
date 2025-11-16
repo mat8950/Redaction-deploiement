@@ -1,0 +1,92 @@
+groups:
+  # Alertes spécifiques à la fédération
+  - name: federation_alerts
+    interval: 30s
+    rules:
+      # Alerte si un Prometheus edge est inaccessible
+      - alert: PrometheusEdgeDown
+        expr: up{job=~"federate-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: federation
+        annotations:
+          summary: "Prometheus Edge {{ $labels.site }} est inaccessible"
+          description: "Le Prometheus du site {{ $labels.site }} ({{ $labels.datacenter }}) est down depuis 2 minutes."
+          impact: "Perte de visibilité sur le site {{ $labels.site }}"
+          action: "Vérifier la connectivité réseau et l'état du Prometheus edge"
+
+      # Alerte si le scraping de fédération est lent
+      - alert: FederationScrapeSlow
+        expr: scrape_duration_seconds{job=~"federate-.*"} > 15
+        for: 5m
+        labels:
+          severity: warning
+          category: federation
+        annotations:
+          summary: "Scraping de fédération lent pour {{ $labels.site }}"
+          description: "Le scraping du site {{ $labels.site }} prend {{ $value }}s (> 15s)."
+          action: "Vérifier la charge du Prometheus edge et la bande passante réseau"
+
+      # Alerte si trop d'échantillons sont scrapés
+      - alert: FederationHighSampleCount
+        expr: scrape_samples_scraped{job=~"federate-.*"} > 100000
+        for: 10m
+        labels:
+          severity: warning
+          category: federation
+        annotations:
+          summary: "Nombre élevé d'échantillons pour {{ $labels.site }}"
+          description: "Le site {{ $labels.site }} expose {{ $value }} échantillons (> 100k)."
+          action: "Optimiser les règles de fédération ou les règles d'agrégation"
+
+      # Alerte si un site a beaucoup d'instances down
+      - alert: SiteHighInstancesDown
+        expr: |
+          (site:up:count / site:instances:count) < 0.8
+        for: 5m
+        labels:
+          severity: critical
+          category: federation
+        annotations:
+          summary: "Plus de 20% des instances down sur {{ $labels.site }}"
+          description: "Le site {{ $labels.site }} a {{ $value | humanizePercentage }} d'instances UP."
+          action: "Vérifier l'état du site et investiguer les instances down"
+
+      # Alerte si la disponibilité globale est faible
+      - alert: GlobalAvailabilityLow
+        expr: |
+          (sum(site:up:count) / sum(site:instances:count)) < 0.95
+        for: 10m
+        labels:
+          severity: warning
+          category: federation
+        annotations:
+          summary: "Disponibilité globale faible"
+          description: "La disponibilité globale est à {{ $value | humanizePercentage }}."
+          action: "Vérifier l'état de tous les sites"
+
+      # Alerte si un site a une charge CPU élevée
+      - alert: SiteHighCPU
+        expr: site:cpu_utilization:avg > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: federation
+        annotations:
+          summary: "CPU élevé sur le site {{ $labels.site }}"
+          description: "Le site {{ $labels.site }} a une utilisation CPU moyenne de {{ $value }}%."
+          action: "Investiguer les instances avec CPU élevé sur ce site"
+
+      # Alerte si le lag de fédération est important
+      - alert: FederationLag
+        expr: |
+          time() - timestamp(up{job=~"federate-.*"}) > 120
+        for: 5m
+        labels:
+          severity: warning
+          category: federation
+        annotations:
+          summary: "Lag de fédération pour {{ $labels.site }}"
+          description: "Les métriques du site {{ $labels.site }} ont {{ $value }}s de retard."
+          action: "Vérifier la latence réseau et l'état du Prometheus edge"

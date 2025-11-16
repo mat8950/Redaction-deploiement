@@ -1,0 +1,294 @@
+version: '3.8'
+
+# Configuration Docker Compose pour la Fédération Prometheus
+# 2 instances Prometheus: Central (hub) et Edge (collector)
+
+# Définition des volumes
+volumes:
+  prometheus-central-data:
+    driver: local
+  prometheus-edge-data:
+    driver: local
+  grafana-data:
+    driver: local
+  alertmanager-data:
+    driver: local
+
+# Définition du réseau
+networks:
+  monitoring:
+    driver: bridge
+
+services:
+  # ========================================
+  # PROMETHEUS CENTRAL (Federation Hub)
+  # ========================================
+  prometheus-central:
+    image: prom/prometheus:latest
+    container_name: prometheus-central
+    restart: unless-stopped
+
+    volumes:
+      # Configuration centrale
+      - ./prometheus/prometheus-central.yml:/etc/prometheus/prometheus.yml:ro
+
+      # Alertes pour la fédération
+      - ./prometheus/alerts/federation.yml:/etc/prometheus/alerts/federation.yml:ro
+      - ./prometheus/alerts/availability.yml:/etc/prometheus/alerts/availability.yml:ro
+      - ./prometheus/alerts/resources.yml:/etc/prometheus/alerts/resources.yml:ro
+
+      # Fichiers de targets (optionnel pour le central)
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+
+      # Données
+      - prometheus-central-data:/prometheus
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'         # Rétention longue pour le central
+      - '--storage.tsdb.retention.size=20GB'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+    ports:
+      - "9090:9090"                                 # Prometheus Central UI
+
+    networks:
+      - monitoring
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ========================================
+  # PROMETHEUS EDGE Site 1 (Local Collector)
+  # ========================================
+  prometheus-site1:
+    image: prom/prometheus:latest
+    container_name: prometheus-site1
+    restart: unless-stopped
+
+    volumes:
+      # Configuration edge
+      - ./prometheus/prometheus-edge.yml:/etc/prometheus/prometheus.yml:ro
+
+      # Règles d'agrégation
+      - ./prometheus/rules/aggregation.yml:/etc/prometheus/rules/aggregation.yml:ro
+
+      # Alertes locales
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+
+      # Fichiers de targets locaux
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+
+      # Données
+      - prometheus-edge-data:/prometheus
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'         # Rétention courte pour l'edge
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+    ports:
+      - "9091:9090"                                 # Prometheus Edge UI (port différent)
+
+    networks:
+      - monitoring
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ========================================
+  # Alertmanager
+  # ========================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.advertise-address=0.0.0.0:9093'
+
+    ports:
+      - "9093:9093"
+
+    networks:
+      - monitoring
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ========================================
+  # Grafana (connecté au Prometheus Central)
+  # ========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+
+    user: "472"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+    environment:
+      # Identifiants
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+
+      # Configuration serveur
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_SERVER_DOMAIN=localhost
+
+      # Désactiver l'inscription
+      - GF_USERS_ALLOW_SIGN_UP=false
+
+      # Logs
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+
+      # Plugins
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      - monitoring
+
+    depends_on:
+      prometheus-central:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ========================================
+  # Node Exporter (pour Prometheus Edge)
+  # ========================================
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+
+    # Configuration simplifiée pour Windows
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+
+    ports:
+      - "9100:9100"
+
+    networks:
+      - monitoring
+
+    # Désactivé par défaut sur Windows
+    profiles:
+      - linux
+
+  # ========================================
+  # cAdvisor (métriques conteneurs)
+  # ========================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - monitoring
+
+    privileged: true
+
+    devices:
+      - /dev/kmsg
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M

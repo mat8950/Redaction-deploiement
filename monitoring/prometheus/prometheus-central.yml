@@ -1,0 +1,114 @@
+# Configuration Prometheus CENTRAL (fédéré)
+# Ce Prometheus récupère les métriques agrégées depuis les Prometheus locaux
+
+global:
+  scrape_interval: 30s              # Intervalle plus long pour le central
+  evaluation_interval: 30s
+  scrape_timeout: 20s
+
+  external_labels:
+    cluster: 'central-monitoring'
+    role: 'federation-hub'
+    environment: 'production'
+
+# Configuration Alertmanager (central)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Règles d'alertes globales (agrégées)
+rule_files:
+  # Alertes sur la fédération elle-même
+  - '/etc/prometheus/alerts/federation.yml'
+
+  # Alertes globales (agrégées depuis tous les sites)
+  - '/etc/prometheus/alerts/availability.yml'
+  - '/etc/prometheus/alerts/resources.yml'
+
+# Configuration des targets à monitorer
+scrape_configs:
+  # ========================================
+  # FEDERATION - Prometheus Locaux (Edge)
+  # ========================================
+
+  # Prometheus Local - Site 1
+  - job_name: 'federate-site1'
+    scrape_interval: 30s
+    scrape_timeout: 20s
+
+    honor_labels: true              # Préserver les labels des Prometheus sources
+    metrics_path: '/federate'
+
+    params:
+      'match[]':
+        # Récupérer toutes les métriques 'up'
+        - '{job=~".+"}'
+
+        # Métriques système agrégées
+        - '{__name__=~"node_.*"}'
+
+        # Métriques d'application
+        - '{__name__=~"http_.*"}'
+        - '{__name__=~"grpc_.*"}'
+
+        # Métriques custom
+        - '{__name__=~"app_.*"}'
+
+        # Alertes actives
+        - 'ALERTS{alertstate="firing"}'
+
+    static_configs:
+      - targets:
+          - 'prometheus-site1:9090'
+        labels:
+          site: 'site1'
+          datacenter: 'dc1'
+          region: 'eu-west-1'
+
+  # Prometheus Local - Site 2
+  - job_name: 'federate-site2'
+    scrape_interval: 30s
+    scrape_timeout: 20s
+
+    honor_labels: true
+    metrics_path: '/federate'
+
+    params:
+      'match[]':
+        - '{job=~".+"}'
+        - '{__name__=~"node_.*"}'
+        - '{__name__=~"http_.*"}'
+        - '{__name__=~"grpc_.*"}'
+        - '{__name__=~"app_.*"}'
+        - 'ALERTS{alertstate="firing"}'
+
+    static_configs:
+      - targets:
+          - 'prometheus-site2:9090'
+        labels:
+          site: 'site2'
+          datacenter: 'dc2'
+          region: 'us-east-1'
+
+  # ========================================
+  # Auto-monitoring du Prometheus Central
+  # ========================================
+  - job_name: 'prometheus-central'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'prometheus-central'
+          role: 'federation-hub'
+
+  # ========================================
+  # Targets Locaux du Central (optionnel)
+  # ========================================
+
+  # Monitoring de l'infrastructure centrale
+  - job_name: 'central-infrastructure'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/central-*.yml'
+        refresh_interval: 1m
